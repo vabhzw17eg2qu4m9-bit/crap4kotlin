@@ -23,7 +23,7 @@ class MethodExtractorTest {
     @Test
     fun packagePrefixIncluded() {
         val cn = classNames("package a.b.c\n\nfun go() { }", "Go.kt")
-        assertEquals(listOf("a.b.c/GoKt"), cn)
+        assertEquals(listOf("a/b/c/GoKt"), cn)
     }
 
     @Test

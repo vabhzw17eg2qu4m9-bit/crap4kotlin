@@ -573,11 +573,12 @@ private class Extractor(
         return true
     }
 
+    // JaCoCo spells packages with slashes (`com/test/jsr/Foo`)
     private fun packagePrefix(): String {
         if (tokens.firstOrNull()?.text != "package") return ""
         val parts = packageParts()
         if (parts.isEmpty()) return ""
-        return parts.joinToString(".") + "/"
+        return parts.joinToString("/") + "/"
     }
 
     private fun packageParts(): List<String> {

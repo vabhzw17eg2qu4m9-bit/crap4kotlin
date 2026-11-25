@@ -213,11 +213,40 @@ class CliTest {
         File(src, "Keep.kt").writeText("class Keep { fun k() { } }")
         File(src, "gen").mkdirs()
         File(src, "gen/Drop.kt").writeText("class Drop { fun d() { } }")
-        report(tmp, missed = 0, covered = 1)
+        File(tmp, "build/reports/jacoco/test").apply { mkdirs() }
+        File(tmp, "build/reports/jacoco/test/jacocoTestReport.xml").writeText(
+            """
+            <report>
+              <class name="Keep" sourcefilename="Keep.kt">
+                <method name="k" line="1"><counter type="LINE" missed="0" covered="1"/></method>
+              </class>
+            </report>
+            """.trimIndent(),
+        )
         reset()
         assertEquals(0, run(listOf("--exclude", "**/gen/**"), tmp))
         assertTrue(!out.contains("Drop.d()"))
         assertTrue(out.contains("Keep.k()"))
+    }
+
+    @Test
+    fun coverageMatchingNothingExitsOne(@TempDir tmp: File) {
+        project(tmp)
+        // the report records a different source file: no analyzed row matches
+        val dir = File(tmp, "build/reports/jacoco/test").apply { mkdirs() }
+        File(dir, "jacocoTestReport.xml").writeText(
+            """
+            <report>
+              <class name="other/Other" sourcefilename="Other.kt">
+                <method name="x" line="1"><counter type="LINE" missed="0" covered="1"/></method>
+              </class>
+            </report>
+            """.trimIndent(),
+        )
+        reset()
+        assertEquals(1, run(emptyList(), tmp))
+        assertTrue(err.contains("no analyzed function matches the coverage input"))
+        assertTrue(err.contains("pass vacuously"))
     }
 
     @Test

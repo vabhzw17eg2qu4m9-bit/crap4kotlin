@@ -60,6 +60,8 @@ Generate the file with:
 ./gradlew test jacocoTestReport
 ```
 
+Note: code that executes only under Robolectric is not seen by the default JaCoCo setup, so such functions show up as `N/A` rows (the Android lane observed this) — the vacuous-gate guard then fails the run instead of passing on zero matched rows.
+
 ## Complexity rules
 
 Base 1; +1 for each `if` (also `else if`), `for`, `while` (loop head), `do`, `catch`, each `->` arm of a `when` body (also `else ->`), and each `&&`, `||`, `?:`. The `while` that terminates a `do` block does not count; `->` inside a lambda nested in a `when` body belongs to the lambda.

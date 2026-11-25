@@ -105,6 +105,41 @@ class AnalyzerTest {
     }
 
     @Test
+    fun nestedPackageMatchesSlashedJacocoClass(@TempDir tmp: File) {
+        // regression: JaCoCo names packages with slashes (a/b/c), the source
+        // statement uses dots (package a.b.c) — the row must not be N/A
+        val src = File(tmp, "src/main/kotlin/a/b/c").apply { mkdirs() }
+        File(src, "Foo.kt").writeText(
+            """
+            package a.b.c
+
+            class Foo {
+                fun bar(): Int {
+                    return 1
+                }
+            }
+            """.trimIndent(),
+        )
+        val dir = File(tmp, "build/reports/jacoco/test").apply { mkdirs() }
+        File(dir, "jacocoTestReport.xml").writeText(
+            """
+            <report>
+              <package name="a/b/c">
+                <class name="a/b/c/Foo" sourcefilename="Foo.kt">
+                  <method name="bar" line="5"><counter type="LINE" missed="0" covered="1"/></method>
+                </class>
+              </package>
+            </report>
+            """.trimIndent(),
+        )
+        val result = analyze(listOf(File(tmp, "src/main/kotlin/a/b/c/Foo.kt")), File(tmp, "build/reports/jacoco/test/jacocoTestReport.xml"), tmp, strict = false, diffLines = null)
+        val bar = result.metrics.single()
+        assertEquals("Foo.bar()", bar.methodName)
+        assertEquals(1.0, bar.coverage)
+        assertEquals(1.0, bar.crapScore)
+    }
+
+    @Test
     fun missingCoverageThrows(@TempDir tmp: File) {
         project(tmp)
         try {

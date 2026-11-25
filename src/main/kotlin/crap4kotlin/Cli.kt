@@ -54,8 +54,9 @@ private fun runAnalysis(opts: Options, out: (String) -> Unit, err: (String) -> U
         return 1
     }
     val threshold = parseThreshold(opts.threshold)
+    val coveragePath = resolveCoveragePath(opts, cwd)
     val result = try {
-        analyze(files, resolveCoveragePath(opts, cwd), cwd, opts.strict, diffLines)
+        analyze(files, coveragePath, cwd, opts.strict, diffLines)
     } catch (e: CoverageInputException) {
         err("${e.message}. Generate unit-test coverage with `./gradlew test jacocoTestReport`.\n")
         return 1
@@ -63,6 +64,22 @@ private fun runAnalysis(opts: Options, out: (String) -> Unit, err: (String) -> U
     if (diffLines != null && result.metrics.isEmpty()) {
         out("No Kotlin files to analyze.\n")
         return 0
+    }
+    return finish(result, threshold, coveragePath, out, err)
+}
+
+// zero matched rows is the vacuous-gate case: the same family policy that
+// fails a run on missing or empty coverage
+private fun finish(
+    result: AnalysisResult,
+    threshold: Double,
+    coveragePath: File,
+    out: (String) -> Unit,
+    err: (String) -> Unit,
+): Int {
+    if (result.metrics.isNotEmpty() && result.metrics.all { it.coverage == null }) {
+        err("no analyzed function matches the coverage input at ${coveragePath.absolutePath}: the gate would pass vacuously. Generate unit-test coverage with `./gradlew test jacocoTestReport`.\n")
+        return 1
     }
     out(formatReport(result.metrics, threshold, result.parseFailures))
     return verdict(result.metrics, threshold, err)
