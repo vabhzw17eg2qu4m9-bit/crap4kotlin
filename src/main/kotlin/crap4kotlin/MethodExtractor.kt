@@ -203,7 +203,9 @@ internal class BraceMatcher(private val tokens: List<Tok>) {
     fun openOf(closeIdx: Int): Int = open.getOrElse(closeIdx) { -1 }
 }
 
-private class TypeFrame(val name: String, val bodyDepth: Int)
+private class TypeFrame(val name: String, val bodyDepth: Int, val declLine: Int)
+
+private class TypeDecl(val name: String, val declLine: Int)
 
 private class Extractor(
     private val tokens: List<Tok>,
@@ -214,7 +216,7 @@ private class Extractor(
     private val pkgPrefix: String
     private val typeStack = ArrayDeque<TypeFrame>()
     private val methodStack = ArrayDeque<String>()
-    private val typeBodyOpen = mutableMapOf<Int, String>() // brace idx -> type name
+    private val typeBodyOpen = mutableMapOf<Int, TypeDecl>() // brace idx -> type body info
     private val methodBodyName = mutableMapOf<Int, String>() // brace idx -> method name
     private var braceDepth = 0
 
@@ -254,7 +256,7 @@ private class Extractor(
     private fun braceStep(i: Int, t: String): Int {
         if (t == "{") {
             braceDepth++
-            typeBodyOpen[i]?.let { typeStack.addLast(TypeFrame(it, braceDepth)) }
+            typeBodyOpen[i]?.let { typeStack.addLast(TypeFrame(it.name, braceDepth, it.declLine)) }
             return i + 1
         }
         if (t == "}") {
@@ -304,33 +306,48 @@ private class Extractor(
         var j = nameIdx + 1
         if (tokens.getOrNull(j)?.text == "(") {
             val close = closeParen(j)
-            val covLine = if (close > j + 1) tokens[j + 1].line else tokens[nameIdx].line
-            recordMethod("$name.init", classPath(name), tokens[nameIdx].line, tokens[close].line, covLine, j, nameIdx)
+            // JaCoCo reports <init> of a primary constructor at the class line
+            recordMethod("$name.init", classPath(name), tokens[nameIdx].line, tokens[close].line, tokens[nameIdx].line, j, nameIdx)
             j = close + 1
         }
-        registerTypeBody(name, j)
+        registerTypeBody(name, tokens[nameIdx].line, j)
         return i + 1
     }
 
     private fun objectDecl(i: Int): Int {
         val companion = tokens.getOrNull(i - 1)?.text == "companion"
         val name = wordAt(i + 1) ?: if (companion) "Companion" else return i + 1
-        registerTypeBody(name, if (wordAt(i + 1) != null) i + 2 else i + 1)
+        registerTypeBody(name, tokens[i].line, if (wordAt(i + 1) != null) i + 2 else i + 1)
         return i + 1
     }
 
     private fun initBlock(i: Int): Int {
         val owner = currentTypeName() ?: return i + 1
         if (tokens.getOrNull(i + 1)?.text != "{" || tokens.getOrNull(i - 1)?.text == ".") return i + 1
-        return recordBraceMethod("$owner.init", classPath(null), i, i + 1)
+        // JaCoCo merges init blocks into <init> at the class declaration line
+        return recordBraceMethod("$owner.init", classPath(null), i, i + 1, typeStack.last().declLine)
     }
 
     private fun secondaryCtor(i: Int): Int {
         if (!atMemberDepth() || tokens.getOrNull(i - 1)?.text == "." || tokens.getOrNull(i + 1)?.text != "(") return i + 1
         val close = closeParen(i + 1)
-        val body = findBodyBrace(close + 1) ?: return close + 1
         val owner = currentTypeName() ?: return close + 1
-        return recordBraceMethod("$owner.init", classPath(null), i, body)
+        val body = findBodyBrace(close + 1)
+        if (body != null) {
+            // JaCoCo reports <init> of a secondary constructor at its own line
+            return recordBraceMethod("$owner.init", classPath(null), i, body, tokens[i].line)
+        }
+        val deleg = delegationSpan(close + 1) ?: Pair(i + 1, close)
+        recordMethod("$owner.init", classPath(null), tokens[i].line, tokens[deleg.second].line, tokens[i].line, deleg.first, i)
+        return deleg.second + 1
+    }
+
+    // the argument list of `: this(...)` / `: super(...)` after the parameters
+    private fun delegationSpan(from: Int): Pair<Int, Int>? {
+        if (tokens.getOrNull(from)?.text != ":") return null
+        if (tokens.getOrNull(from + 1)?.text != "(") return null
+        val close = closeParen(from + 1)
+        return Pair(from + 1, close)
     }
 
     private fun accessor(i: Int): Int {
@@ -381,12 +398,12 @@ private class Extractor(
     // immediately (the loop never visits the open brace of a recorded body)
     // and returns the index after the OPEN brace: the loop keeps walking the
     // interior so local funs inside the body are found.
-    private fun recordBraceMethod(name: String, className: String, headerIdx: Int, openIdx: Int): Int {
+    private fun recordBraceMethod(name: String, className: String, headerIdx: Int, openIdx: Int, covLine: Int? = null): Int {
         val close = matcher.closeOf(openIdx)
         val endLine = if (close >= 0) tokens[close].line else tokens.lastOrNull()?.line ?: startLineOf(headerIdx)
         val firstInterior = openIdx + 1
-        val covLine = if (close >= 0 && firstInterior < close) tokens[firstInterior].line else tokens[openIdx].line
-        recordMethod(name, className, tokens[headerIdx].line, endLine, covLine, openIdx, headerIdx)
+        val line = covLine ?: if (close >= 0 && firstInterior < close) tokens[firstInterior].line else tokens[openIdx].line
+        recordMethod(name, className, tokens[headerIdx].line, endLine, line, openIdx, headerIdx)
         if (close >= 0) {
             methodBodyName[openIdx] = name
             methodStack.addLast(name)
@@ -416,9 +433,9 @@ private class Extractor(
         return j
     }
 
-    private fun registerTypeBody(name: String, from: Int) {
+    private fun registerTypeBody(name: String, declLine: Int, from: Int) {
         val body = findBodyBrace(from) ?: return
-        typeBodyOpen[body] = name
+        typeBodyOpen[body] = TypeDecl(name, declLine)
     }
 
     private fun isWordTok(i: Int): Boolean {

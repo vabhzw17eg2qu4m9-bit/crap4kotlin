@@ -54,6 +54,8 @@ Methods counted: every `fun` with a body, primary and secondary constructors and
 
 JaCoCo XML only (`build/reports/jacoco/test/jacocoTestReport.xml`). A `<method>` matches a source method when the class name and the `line` attribute are equal (JaCoCo reports the first body line). The `LINE` counter gives `covered / (covered + missed)`. Compiler-generated methods (name containing `$`) are skipped. A method without a match is an `N/A` row.
 
+Constructor rows (`Type.init`) match the JaCoCo `<init>` entry at the class declaration line (primary constructor, `init` block) or at the `constructor(...)` line (secondary constructor, with or without a body).
+
 Generate the file with:
 
 ```bash

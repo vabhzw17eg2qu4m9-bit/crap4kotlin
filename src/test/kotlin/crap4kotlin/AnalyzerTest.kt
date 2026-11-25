@@ -140,6 +140,74 @@ class AnalyzerTest {
     }
 
     @Test
+    fun constructorRowsMatchJacocoInitEntries(@TempDir tmp: File) {
+        // regression: <init> rows must carry real coverage — primary at the
+        // class line, secondary at the constructor line
+        val src = File(tmp, "src/main/kotlin/demo/W.kt").apply { parentFile.mkdirs() }
+        val source = """
+            package demo
+
+            class W(val a: Int) {
+                private val b = a + 1
+
+                constructor(s: String) : this(s.length) {
+                    println(s)
+                }
+            }
+        """.trimIndent()
+        src.writeText(source)
+        val lines = source.lines()
+        val classLine = lines.indexOfFirst { it.startsWith("class W(") } + 1
+        val ctorLine = lines.indexOfFirst { it.contains("constructor(s: String)") } + 1
+        val dir = File(tmp, "build/reports/jacoco/test").apply { mkdirs() }
+        File(dir, "jacocoTestReport.xml").writeText(
+            """
+            <report>
+              <package name="demo">
+                <class name="demo/W" sourcefilename="W.kt">
+                  <method name="&lt;init&gt;" line="$classLine"><counter type="LINE" missed="0" covered="2"/></method>
+                  <method name="&lt;init&gt;" line="$ctorLine"><counter type="LINE" missed="1" covered="1"/></method>
+                </class>
+              </package>
+            </report>
+            """.trimIndent(),
+        )
+        val result = analyze(listOf(src), File(dir, "jacocoTestReport.xml"), tmp, strict = false, diffLines = null)
+        val rows = result.metrics.filter { it.methodName == "W.init" }
+        assertEquals(2, rows.size)
+        // CRAP descending: the partially covered secondary constructor first
+        assertEquals(listOf(0.5, 1.0), rows.map { it.coverage })
+    }
+
+    @Test
+    fun delegationOnlyConstructorMatchesAtItsLine(@TempDir tmp: File) {
+        val src = File(tmp, "src/main/kotlin/demo/Y.kt").apply { parentFile.mkdirs() }
+        val source = """
+            package demo
+
+            class Y {
+                constructor(v: Int)
+            }
+        """.trimIndent()
+        src.writeText(source)
+        val ctorLine = source.lines().indexOfFirst { it.contains("constructor(v: Int)") } + 1
+        val dir = File(tmp, "build/reports/jacoco/test").apply { mkdirs() }
+        File(dir, "jacocoTestReport.xml").writeText(
+            """
+            <report>
+              <class name="demo/Y" sourcefilename="Y.kt">
+                <method name="&lt;init&gt;" line="$ctorLine"><counter type="LINE" missed="0" covered="1"/></method>
+              </class>
+            </report>
+            """.trimIndent(),
+        )
+        val result = analyze(listOf(src), File(dir, "jacocoTestReport.xml"), tmp, strict = false, diffLines = null)
+        val row = result.metrics.single { it.methodName == "Y.init" }
+        assertEquals(ctorLine, row.startLine)
+        assertEquals(1.0, row.coverage)
+    }
+
+    @Test
     fun missingCoverageThrows(@TempDir tmp: File) {
         project(tmp)
         try {
