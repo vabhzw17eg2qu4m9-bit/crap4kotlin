@@ -1,0 +1,19 @@
+name: Quality
+
+on: [push, pull_request]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Test, coverage, install
+        run: ./gradlew test jacocoTestReport installDist
+      - name: JaCoCo XML present
+        run: test -s build/reports/jacoco/test/jacocoTestReport.xml
+      - name: CRAP gate (self-hosting)
+        run: build/install/crap4kotlin/bin/crap4kotlin src/main/kotlin --coverage build/reports/jacoco/test/jacocoTestReport.xml --threshold 8.0

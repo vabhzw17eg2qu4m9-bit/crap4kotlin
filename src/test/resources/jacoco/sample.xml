@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report name="sample">
+  <package name="crap4kotlin">
+    <class name="crap4kotlin/Foo" sourcefilename="Foo.kt">
+      <method name="bar" desc="()I" line="10">
+        <counter type="INSTRUCTION" missed="1" covered="3"/>
+        <counter type="LINE" missed="1" covered="3"/>
+        <counter type="BRANCH" missed="0" covered="0"/>
+      </method>
+      <method name="$default" desc="()I" line="15">
+        <counter type="LINE" missed="2" covered="2"/>
+      </method>
+      <method name="baz" desc="()V" line="20">
+        <counter type="LINE" missed="4" covered="0"/>
+      </method>
+    </class>
+    <class name="crap4kotlin/Foo$Companion" sourcefilename="Foo.kt">
+      <method name="make" desc="()I" line="30">
+        <counter type="LINE" missed="0" covered="2"/>
+      </method>
+    </class>
+  </package>
+</report>
